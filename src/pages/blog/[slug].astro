@@ -1,0 +1,42 @@
+---
+import Layout from '../../layouts/Layout.astro';
+const { slug } = Astro.params;
+
+let res = await fetch(`https://public-api.wordpress.com/wp/v2/sites/testheadless4.wordpress.com/posts/?slug=${slug}&_embed`)
+let [post] = await res.json();
+
+// The getStaticPaths() is required for static Astro sites.
+// If using SSR, you will not need this function.
+export async function getStaticPaths() {
+  let data = await fetch("https://public-api.wordpress.com/wp/v2/sites/testheadless4.wordpress.com/posts/")
+  let posts = await data.json();
+
+  return posts.map((post) => ({
+    params: { slug: post.slug },
+    props: { post: post },
+  }));
+}
+let formatDate = (dateString) => {
+  let date = new Date(dateString);
+  let options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  return date.toLocaleDateString('fr-FR', options);
+};
+---
+
+<Layout title={post.title.rendered}>
+  <script>
+
+  </script>
+  <article class="max-w-4xl m-auto py-32">
+    <img class="aspect-video w-full object-cover mb-8 rounded-3xl" src={post._embedded['wp:featuredmedia'] && post._embedded['wp:featuredmedia']['0'].source_url} />
+
+    <h1 class="text-4xl font-bold mb-2 text-secondary" set:html={post.title.rendered} />
+    <i class="text-secondary/90">écrit par {post._embedded.author[0].name} </i>
+    <p class="mb-8 text-secondary">Publié le <span class="date">{formatDate(post.date)}</span> </p>
+    <div class="grid gap-6 mb-8 text-secondary/80">
+      <Fragment set:html={post.content.rendered} />
+
+    </div>
+   
+  </article>
+</Layout>
