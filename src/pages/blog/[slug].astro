@@ -1,42 +1,225 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+
 const { slug } = Astro.params;
 
-let res = await fetch(`https://public-api.wordpress.com/wp/v2/sites/testheadless4.wordpress.com/posts/?slug=${slug}&_embed`)
+// Fetch the post data
+let res = await fetch(`https://public-api.wordpress.com/wp/v2/sites/helloworld178.wordpress.com/posts/?slug=${slug}&_embed`);
 let [post] = await res.json();
 
-// The getStaticPaths() is required for static Astro sites.
-// If using SSR, you will not need this function.
-export async function getStaticPaths() {
-  let data = await fetch("https://public-api.wordpress.com/wp/v2/sites/testheadless4.wordpress.com/posts/")
-  let posts = await data.json();
+// Fetch recommended posts
+const categoryId = post.categories[0];
+let recommendedRes = await fetch(`https://public-api.wordpress.com/wp/v2/sites/helloworld178.wordpress.com/posts?categories=${categoryId}&exclude=${post.id}&per_page=3&_embed`);
+let recommendedPosts = await recommendedRes.json();
 
-  return posts.map((post) => ({
-    params: { slug: post.slug },
-    props: { post: post },
-  }));
-}
-let formatDate = (dateString) => {
+let formatDate = (dateString: string) => {
   let date = new Date(dateString);
-  let options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-  return date.toLocaleDateString('fr-FR', options);
+  let options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
 };
+
+interface Post {
+  id: number;
+  title: { rendered: string };
+  date: string;
+  modified: string;
+  content: { rendered: string };
+  excerpt: { rendered: string };
+  slug: string;
+  categories: number[];
+  _embedded: {
+    author: Array<{ name: string; url?: string }>;
+    'wp:featuredmedia'?: Array<{ source_url: string }>;
+  };
+}
+
+const typedPost = post as Post;
+
+const stripHtml = (html: string) => html.replace(/<[^>]*>/g, '').trim();
+
+const title = `${typedPost.title.rendered} | YourBlogName`;
+const description = stripHtml(typedPost.excerpt.rendered).substring(0, 160);
+const ogUrl = Astro.url.href;
+const publishDate = new Date(typedPost.date).toISOString();
+const modifiedDate = new Date(typedPost.modified).toISOString();
+const author = typedPost._embedded.author[0].name;
+const authorUrl = typedPost._embedded.author[0].url || '#';
+const featuredImage = typedPost._embedded['wp:featuredmedia']?.[0]?.source_url || '';
+
+// Extract headings for table of contents
+const headings = typedPost.content.rendered.match(/<h[2-4].*?>(.*?)<\/h[2-4]>/g)?.map((heading, index) => {
+  const text = heading.replace(/<[^>]*>/g, '');
+  const tag = heading.match(/<h([2-4])/)[1]; // Extract the heading level (2, 3, or 4)
+  const id = `${tag}-heading-${index}`;
+  return { text, id, tag };
+}) || [];
+
+// Modify content to add IDs to headings
+const modifiedContent = typedPost.content.rendered.replace(
+  /<h([2-4])(.*?)>(.*?)<\/h[2-4]>/g,
+  (match, level, attributes, content, offset) => {
+    const index = typedPost.content.rendered.substring(0, offset).match(new RegExp(`<h${level}`, 'g'))?.length || 0;
+    return `<h${level}${attributes} id="${level}-heading-${index}">${content}</h${level}>`;
+  }
+);
+
 ---
 
-<Layout title={post.title.rendered}>
-  <script>
+<Layout 
+  title={title}
 
-  </script>
-  <article class="max-w-4xl m-auto py-32">
-    <img class="aspect-video w-full object-cover mb-8 rounded-3xl" src={post._embedded['wp:featuredmedia'] && post._embedded['wp:featuredmedia']['0'].source_url} />
+>
+  <div class="slug-page max-w-7xl mx-auto py-32 px-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row">
+    <article class="w-full lg:w-2/3 lg:pr-8">
+      <a href="/" class="mb-6 font-medium hover:underline"> Back Home</a>
+      {featuredImage && (
+        <img 
+          class="aspect-video w-full object-cover mb-8 rounded-3xl" 
+          src={featuredImage} 
+          alt={typedPost.title.rendered}
+        />
+      )}
+      
+      <h1 class="text-4xl font-bold mb-2 text-title" set:html={typedPost.title.rendered} />
+      <p class="text-text">
+        By <a href={authorUrl} class="font-medium hover:underline">{author}</a> | 
+        Published on <time datetime={publishDate}>{formatDate(typedPost.date)}</time>
+        {typedPost.modified !== typedPost.date && (
+          <span> | Updated on <time datetime={modifiedDate}>{formatDate(typedPost.modified)}</time></span>
+        )}
+      </p>
+      
+      <div class="mt-8 prose prose-lg max-w-none text-text">
+        <Fragment set:html={modifiedContent} />
+      </div>
 
-    <h1 class="text-4xl font-bold mb-2 text-secondary" set:html={post.title.rendered} />
-    <i class="text-secondary/90">écrit par {post._embedded.author[0].name} </i>
-    <p class="mb-8 text-secondary">Publié le <span class="date">{formatDate(post.date)}</span> </p>
-    <div class="grid gap-6 mb-8 text-secondary/80">
-      <Fragment set:html={post.content.rendered} />
+      <div class="mt-12">
+        <h2 class="text-2xl font-bold mb-4">Share this article</h2>
+        <div class="flex space-x-4">
+          <a href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(ogUrl)}&text=${encodeURIComponent(typedPost.title.rendered)}`} target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-600">Twitter</a>
+          <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(ogUrl)}`} target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800">Facebook</a>
+          <a href={`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(ogUrl)}&title=${encodeURIComponent(typedPost.title.rendered)}`} target="_blank" rel="noopener noreferrer" class="text-blue-700 hover:text-blue-900">LinkedIn</a>
+        </div>
+      </div>
 
-    </div>
-   
-  </article>
+      {recommendedPosts.length > 0 && (
+        <div class="mt-16">
+          <h2 class="text-2xl font-bold mb-6">Recommended Articles</h2>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {recommendedPosts.map((post: Post) => (
+              <div class="border rounded-lg overflow-hidden shadow-lg">
+                {post._embedded['wp:featuredmedia'] && (
+                  <img 
+                    src={post._embedded['wp:featuredmedia'][0].source_url} 
+                    alt={post.title.rendered}
+                    class="w-full h-48 object-cover"
+                  />
+                )}
+                <div class="p-4">
+                  <h3 class="text-xl font-semibold mb-2" set:html={post.title.rendered} />
+                  <p class="text-sm text-gray-600 mb-4">{formatDate(post.date)}</p>
+                  <a href={`/blog/${post.slug}`} class="text-blue-600 hover:underline">Read more</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </article>
+
+    <aside class="w-full lg:w-1/3 lg:pl-8 mt-8 lg:mt-0">
+      <div class="sticky top-32">
+        <h2 class="text-xl font-bold mb-4">Table of Contents</h2>
+        <nav class="toc">
+          <ul class="table-content space-y-2">
+            {headings.map(({ text, id }) => (
+              <li>
+                <a href={`#${id}`} class="toc-item block py-1 px-2 border-l-4 border-transparent hover:bg-gray-100 transition-colors duration-200">{text}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+    </aside>
+  </div>
 </Layout>
+
+<style is:global>
+
+  .toc {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+  
+  .toc-item {
+  color: #1E1633; /* Equivalent to text-title */
+  transition: all 200ms; /* Equivalent to transition-all duration-200 */
+}
+.table-content{
+list-style-type:none!important;
+padding-left:0!important;
+}
+.toc-item.active {
+  color: #5417EB; /* Equivalent to text-primary */
+  font-weight: bold; /* Equivalent to font-bold */
+  border-left-width: 4px; /* Equivalent to border-l-4 */
+  border-left-color: #5417EB; /* Equivalent to border-primary */
+}
+
+.slug-page h2 span {
+  font-size: 1.25rem; /* Equivalent to text-xl */
+  font-weight: 600!important; /* Equivalent to font-semibold */
+  margin-top: 2rem; /* Equivalent to mt-8 */
+}
+.slug-page h3,.slug-page h2{
+  margin-bottom: 1rem; /* Equivalent to mb-4 */
+
+}
+.slug-page h3 span {
+  font-size: 1.125rem; /* Equivalent to text-lg */
+  font-weight: 600!important; /* Equivalent to font-semibold */
+  margin-bottom: 0.75rem; /* Equivalent to mb-3 */
+  margin-top: 1.5rem; /* Equivalent to mt-6 */
+}
+
+.slug-page p {
+  margin-bottom: 1rem; /* Equivalent to mb-4 */
+}
+
+.slug-page :is(ul, ol) {
+  margin-bottom: 1rem; /* Equivalent to mb-4 */
+  padding-left: 1.5rem; /* Equivalent to pl-6 */
+}
+
+.slug-page ul {
+  list-style-type: disc; /* Equivalent to list-disc */
+}
+
+.slug-page ol {
+  list-style-type: decimal; /* Equivalent to list-decimal */
+}
+
+
+</style>
+
+<script>
+  // Highlight current section in table of contents
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const id = entry.target.getAttribute('id');
+      const tocItem = document.querySelector(`.toc a[href="#${id}"]`);
+      
+      if (entry.isIntersecting) {
+        // Remove 'active' class from all items
+        document.querySelectorAll('.toc-item').forEach(item => item.classList.remove('active'));
+        
+        // Add 'active' class to the current item
+        tocItem?.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-100px 0px -66% 0px', threshold: 0.1 });
+
+  document.querySelectorAll('h2[id]').forEach((section) => {
+    observer.observe(section);
+  });
+</script>

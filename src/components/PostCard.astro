@@ -1,0 +1,49 @@
+---
+interface Props {
+  img: string;
+  alt: string;
+  title: string;
+  excerpt: string;
+  slug: string;
+  authorimg: string;
+  authorname: string;
+  date:string,
+}
+
+
+
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
+const { img, alt, title, excerpt, slug, authorname, authorimg,date } = Astro.props;
+---
+
+<a href={slug} class="border border-border rounded-2xl shadow-sm transition-all hover:shadow-xl hover:shadow-blue-100 hover:translate-y-[1.5px]">
+  <div class="overflow-hidden rounded-t-xl">
+    <img
+      class="transition-all aspect-video object-cover"
+      src={img}
+      alt={alt}
+    />
+  </div>
+  <div class="p-4">
+    <h2 class="font-bold text-lg mt-4 text-title" set:html={title}></h2>
+    <p class="mb-4 text-text line-clamp-1">{excerpt}</p>
+  </div>
+  <div class="flex items-center gap-2 p-4">
+    <img src={authorimg} class="w-10 h-10 rounded-full mr-2" alt="Profile Person" />
+     <div>
+         <div class="text-base font-bold">{authorname}</div>
+         <div class="text-sm">Published on <time datetime={date}>{formatDate(date)}</time></div>
+     </div>
+ </div>
+  <div>
+  </div>
+</a>
+
